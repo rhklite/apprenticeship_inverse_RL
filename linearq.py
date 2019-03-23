@@ -87,24 +87,14 @@ class DQN(nn.Module):
     def __init__(self):
         nn.Module.__init__(self)
         self.l1 = nn.Linear(4, HIDDEN_LAYER)
+        self.l1_1 = nn.Linear(HIDDEN_LAYER, HIDDEN_LAYER)
         self.l2 = nn.Linear(HIDDEN_LAYER, 2)
 
     def forward(self, x):
         x = F.relu(self.l1(x))
+        x = F.relu(self.l1_1(x))
         x = self.l2(x)
         return x
-
-
-
-######################################################################
-# Input extraction
-# ^^^^^^^^^^^^^^^^
-#
-# The code below are utilities for extracting and processing rendered
-# images from the environment. It uses the ``torchvision`` package, which
-# makes it easy to compose image transforms. Once you run the cell it will
-# display an example patch that it extracted.
-#
 
 resize = T.Compose([T.ToPILImage(),
                     T.Resize(40, interpolation=Image.CUBIC),
@@ -175,6 +165,8 @@ plt.show()
 BATCH_SIZE = 128
 GAMMA = 0.999
 EPS_START = 0.9
+num_episodes = 500
+
 EPS_END = 0.05
 EPS_DECAY = 200
 TARGET_UPDATE = 10
@@ -214,9 +206,7 @@ def select_action(state):
     else:
         return torch.tensor([[random.randrange(2)]], device=device, dtype=torch.long)
 
-
 episode_durations = []
-
 
 def plot_durations():
     plt.figure(2)
@@ -236,25 +226,6 @@ def plot_durations():
     if is_ipython:
         display.clear_output(wait=True)
         display.display(plt.gcf())
-
-
-######################################################################
-# Training loop
-# ^^^^^^^^^^^^^
-#
-# Finally, the code for training our model.
-#
-# Here, you can find an ``optimize_model`` function that performs a
-# single step of the optimization. It first samples a batch, concatenates
-# all the tensors into a single one, computes :math:`Q(s_t, a_t)` and
-# :math:`V(s_{t+1}) = \max_a Q(s_{t+1}, a)`, and combines them into our
-# loss. By defition we set :math:`V(s) = 0` if :math:`s` is a terminal
-# state. We also use a target network to compute :math:`V(s_{t+1})` for
-# added stability. The target network has its weights kept frozen most of
-# the time, but is updated with the policy network's weights every so often.
-# This is usually a set number of steps but we shall use episodes for
-# simplicity.
-#
 
 def optimize_model():
     if len(memory) < BATCH_SIZE:
@@ -300,21 +271,6 @@ def optimize_model():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
 
-
-######################################################################
-#
-# Below, you can find the main training loop. At the beginning we reset
-# the environment and initialize the ``state`` Tensor. Then, we sample
-# an action, execute it, observe the next screen and the reward (always
-# 1), and optimize our model once. When the episode ends (our model
-# fails), we restart the loop.
-#
-# Below, `num_episodes` is set small. You should download
-# the notebook and run lot more epsiodes, such as 300+ for meaningful
-# duration improvements.
-#
-
-num_episodes = 200
 for i_episode in range(num_episodes):
     # Initialize the environment and state
     state = torch.from_numpy(env.reset()).unsqueeze(0).to(device, dtype=torch.float)
@@ -322,6 +278,7 @@ for i_episode in range(num_episodes):
         # Select and perform an action
         action = select_action(state)
         next_state, reward, done, _ = env.step(action.item())
+        # get_screen()
         next_state = torch.from_numpy(next_state).unsqueeze(0).to(device, dtype=torch.float)
         reward = torch.tensor([reward], device=device)
 
