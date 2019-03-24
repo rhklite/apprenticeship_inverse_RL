@@ -218,14 +218,14 @@ class DQN_Trainer(object):
         state_list = []
         state = torch.from_numpy(self.env.reset()).unsqueeze(0).to(self.device, dtype=torch.float)
         if save_states:
-            state_list.append(state)
+            state_list.append(self.featurefn(state))
         with torch.no_grad():
             for t in count():
                 a = self.policy_net(state).max(1)[1].view(1, 1)
                 state, reward, done, _ = self.env.step(a.item())
                 state = torch.from_numpy(state).unsqueeze(0).to(self.device, dtype=torch.float)
                 if save_states:
-                    state_list.append(state)
+                    state_list.append(self.featurefn(state))
                 ep_rwd += reward
                 if done or t > 30000:
                     break
@@ -239,6 +239,37 @@ class DQN_Trainer(object):
         else:
             return ep_rwd, state_list
 
+    def featurefn(self, state):
+        #
+        # Have to normalize everything
+        # normalizer = torch.tensor([self.env.x_threshold, self.env.x_threshold, self.env.theta_threshold_radians, self.env.theta_threshold_radians])
+        x, x_dot, theta, theta_dot = state
+        x = (x + self.env.x_threshold) / (2 * self.env.x_threshold)
+        #
+        # Assume that the velocity never goes too high.
+        x_dot = (x_dot + self.env.x_threshold) / (2 * self.env.x_threshold)
+        theta = (theta + self.env.theta_threshold_radians) / (2 * self.env.theta_threshold_radians)
+        theta_dot = (theta_dot + self.env.theta_threshold_radians) / (2 * self.env.theta_threshold_radians)
+        state = torch.tensor(
+            [
+                x, x_dot, theta, theta_dot,
+                x ** 2, x_dot ** 2, theta ** 2, theta_dot ** 2,
+                x ** 3, x_dot ** 3, theta ** 3, theta_dot ** 3,
+                x ** 4, x_dot ** 4, theta ** 4, theta_dot ** 4,
+            ]
+        )
+        x, x_dot, theta, theta_dot = state
+        feat = torch.tensor(
+                        [
+                            x, x_dot, theta, theta_dot,
+                            abs(x), abs(x_dot), abs(theta), abs(theta_dot),
+                            x ** 2, x_dot ** 2, theta ** 2, theta_dot ** 2,
+                            x ** 3, x_dot ** 3, theta ** 3, theta_dot ** 3,
+                            x ** 4, x_dot ** 4, theta ** 4, theta_dot ** 4,
+                        ]
+                    )
+        return feat
+
     def train(self, rwd_weight=None):
         #
         # Train.
@@ -250,14 +281,19 @@ class DQN_Trainer(object):
                 #
                 # Select and perform an action
                 action = self.select_action(state)
-                next_state, reward, done, _ = self.env.step(action.item())
+                next_state_np, reward, done, _ = self.env.step(action.item())
                 if self.plot and i_episode % 100 == 0:
                     self.get_screen()
-                next_state = torch.from_numpy(next_state).unsqueeze(0).to(self.device, dtype=torch.float)
+                next_state = torch.from_numpy(next_state_np).unsqueeze(0).to(self.device, dtype=torch.float)
                 if rwd_weight is None:
-                    reward = torch.tensor([reward], device=self.device)
+                    # reward = torch.tensor([reward], device=self.device)
+                    x, x_dot, theta, theta_dot = next_state_np
+                    r1 = (self.env.x_threshold - abs(x)) / self.env.x_threshold - 0.8
+                    r2 = (self.env.theta_threshold_radians - abs(theta)) / self.env.theta_threshold_radians - 0.5
+                    reward = torch.tensor([r1 + r2])
                 else:
-                    reward = rwd_weight.t() @ state
+                    feat = self.featurefn(next_state_np)
+                    reward = rwd_weight.t() @ feat
                 #
                 # Observe new state
                 if done:
@@ -354,7 +390,11 @@ class ALVIRL(object):
         expert = DQN_Trainer(args)
         if not expert.is_trained:
             expert.train()
-        # if
+        #
+        # Not all saved things have this, compute just in case.
+        if expert.avgFeature is None:
+            expert.gatherAverageFeature()
+
 #
 # Parse the input arguments.
 def getInputArgs():
