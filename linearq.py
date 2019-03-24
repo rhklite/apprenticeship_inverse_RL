@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import gym
 import math
+import copy
 import torch
 import random
 import argparse
@@ -36,21 +37,21 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
-HIDDEN_LAYER = 32  # NN hidden layer size
+HIDDEN_LAYER = 64  # NN hidden layer size
 class DQN(nn.Module):
     def __init__(self):
         nn.Module.__init__(self)
         self.l1 = nn.Linear(4, HIDDEN_LAYER)
         self.l1_1 = nn.Linear(HIDDEN_LAYER, HIDDEN_LAYER)
         self.l1_2 = nn.Linear(HIDDEN_LAYER, HIDDEN_LAYER)
-        self.l1_3 = nn.Linear(HIDDEN_LAYER, HIDDEN_LAYER)
+        # self.l1_3 = nn.Linear(HIDDEN_LAYER, HIDDEN_LAYER)
         self.l2 = nn.Linear(HIDDEN_LAYER, 2)
 
     def forward(self, x):
         x = F.relu(self.l1(x))
         x = F.relu(self.l1_1(x))
         x = F.relu(self.l1_2(x))
-        x = F.relu(self.l1_3(x))
+        # x = F.relu(self.l1_3(x))
         x = self.l2(x)
         return x
 
@@ -89,6 +90,8 @@ class DQN_Trainer(object):
         self.target_net = DQN().to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
+        self.best_model = None
+        self.best_rwd = -float('inf')
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=0.001)
         self.memory = ReplayMemory(100000)
@@ -196,11 +199,41 @@ class DQN_Trainer(object):
                 param.grad.data.clamp_(-1, 1)
             self.optimizer.step()
 
+    def testModel(self, mdl, save_states=False):
+        ep_rwd = 0
+        state_list = []
+        state = torch.from_numpy(self.env.reset()).unsqueeze(0).to(self.device, dtype=torch.float)
+        if save_states:
+            state_list.append(state)
+        with torch.no_grad():
+            for t in count():
+                a = self.policy_net(state).max(1)[1].view(1, 1)
+                state, reward, done, _ = self.env.step(a.item())
+                state = torch.from_numpy(state).unsqueeze(0).to(self.device, dtype=torch.float)
+                if save_states:
+                    state_list.append(state)
+                ep_rwd += reward
+                if done or t > 10000:
+                    break
+        #
+        # Based on the total reward for the episode determine the best model.
+        if ep_rwd > self.best_rwd and not save_states:
+            self.best_rwd = ep_rwd
+            self.best_model = copy.deepcopy(mdl)
+        if not save_states:
+            return ep_rwd
+        else:
+            return ep_rwd, state_list
+
     def train(self):
+        #
+        # Train.
         for i_episode in range(self.num_episodes):
+            #
             # Initialize the environment and state
             state = torch.from_numpy(self.env.reset()).unsqueeze(0).to(self.device, dtype=torch.float)
             for t in count():
+                #
                 # Select and perform an action
                 action = self.select_action(state)
                 next_state, reward, done, _ = self.env.step(action.item())
@@ -208,25 +241,32 @@ class DQN_Trainer(object):
                     self.get_screen()
                 next_state = torch.from_numpy(next_state).unsqueeze(0).to(self.device, dtype=torch.float)
                 reward = torch.tensor([reward], device=self.device)
-
+                #
                 # Observe new state
                 last_screen = state
                 current_screen = next_state
                 if done:
                     next_state = None
-
+                #
                 # Store the transition in self.memory
                 self.memory.push(state, action, next_state, reward)
-
+                #
                 # Move to the next state
                 state = next_state
-
+                #
                 # Perform one step of the optimization (on the target network)
                 self.optimize_model()
                 if done:
                     self.episode_durations.append(t + 1)
                     self.showProgress(i_episode)
                     break
+            #
+            # Do not test the model until we have been through at least 100
+            policy_rwd = 0
+            if i_episode > 100:
+                policy_rwd = self.testModel(self.policy_net)
+                db.printInfo('Policy Reward: %d' % policy_rwd)
+            #
             # Update the target network, copying all weights and biases in DQN
             if i_episode % self.TARGET_UPDATE == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -258,6 +298,19 @@ class DQN_Trainer(object):
                 plt.plot(means.numpy())
 
             plt.pause(0.001)  # pause a bit so that plots are updated
+
+    def gatherAverageFeature(self):
+        n_iter = 1000
+        sample_sum = None
+        for i in range(n_iter):
+            rwd, states = self.testModel(self.best_model, True)
+            episodeMean = torch.stack(states).mean(0)
+            if sample_sum is None:
+                sample_sum = episodeMean
+            else:
+                sample_sum += episodeMean
+        sample_sum /= n_iter
+        db.printInfo(sample_sum)
 #
 # Parse the input arguments.
 def getInputArgs():
@@ -271,3 +324,4 @@ if __name__ == '__main__':
     args = getInputArgs()
     dqnTrainer = DQN_Trainer(args)
     dqnTrainer.train()
+    dqnTrainer.gatherAverageFeature()
