@@ -61,8 +61,6 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
 class DQN_Trainer(object):
-
-    env = gym.make('CartPole-v0').unwrapped
     #
     # if gpu is to be used
     device = torch.device("cpu") #"cuda" if torch.cuda.is_available() else
@@ -80,10 +78,11 @@ class DQN_Trainer(object):
                         T.ToTensor()])
 
 
-    def __init__(self, args):
+    def __init__(self, env, args):
         # Get screen size so that we can initialize layers correctly based on shape
         # returned from AI gym. Typical dimensions at this point are close to 3x40x90
         # which is the result of a clamped and down-scaled render buffer in get_screen()
+        self.env = env
         self.env.reset()
 
         # policy_net = DQN(screen_height, screen_width).to(device)
@@ -387,13 +386,49 @@ class DQN_Trainer(object):
 class ALVIRL(object):
 
     def __init__(self, args):
-        expert = DQN_Trainer(args)
-        if not expert.is_trained:
-            expert.train()
+        self.env = gym.make('CartPole-v0').unwrapped
+        self.expert = DQN_Trainer(args, self.env)
+        if not self.expert.is_trained:
+            self.expert.train()
         #
         # Not all saved things have this, compute just in case.
-        if expert.avgFeature is None:
-            expert.gatherAverageFeature()
+        if self.expert.avgFeature is None:
+            self.expert.gatherAverageFeature()
+        self.expert_feat = self.expert.avgFeature
+        args.configStr = None
+        self.args = args
+
+    def train(self):
+        sampleFeat = self.student.featurefn(self.env.reset())
+        w_0 = torch.rand(sampleFeat.size(0), 1)
+        w_0 /= w_0.norm()
+        weights = [w_0]
+        i = 1
+        #
+        # Create zeroth student.
+        student = DQN_Trainer(args, self.env)
+        student.train(w_0)
+        studentFeat, studentRwd = student.gatherAverageFeature()
+        #
+        # Create first student.
+        weights.append(self.expert_feat - studentFeat)
+        feature_bar_list = [studentFeat]
+        feature_list = [studentFeat]
+        #
+        # Iterate training.
+        n_iter = 20
+        for i in range(n_iter):
+            student = DQN_Trainer(args, self.env)
+            student.train(weights[-1])
+            studentFeat, studentRwd = student.gatherAverageFeature()
+            feature_list.append(studentFeat)
+            feat_bar_next = feature_bar_list[-1] + ((feature_list[-1] - feature_bar_list[-1]).t() @ (self.expert_feat - feature_bar_list[-1]))\
+                            / ((feature_list[-1] - feature_bar_list[-1]).t() @ (feature_list[-1] - feature_bar_list[-1]))\
+                            * (feature_list[-1] - feature_bar_list[-1])
+            feature_bar_list.append(feat_bar_next)
+            weights.append(self.expert_feat - feat_bar_next)
+            db.printInfo('t: ', (self.expert_feat - feat_bar_next).norm().item())
+        db.printInfo(feat_bar_next)
 
 #
 # Parse the input arguments.
