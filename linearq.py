@@ -65,7 +65,7 @@ class DQN_Trainer(object):
     env = gym.make('CartPole-v0').unwrapped
     #
     # if gpu is to be used
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu") #"cuda" if torch.cuda.is_available() else
 
     BATCH_SIZE = 128
     GAMMA = 0.999
