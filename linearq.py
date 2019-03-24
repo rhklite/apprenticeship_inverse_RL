@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
+import os
 import gym
 import math
 import copy
 import torch
 import random
+import pathlib
 import argparse
 import matplotlib
 import debug as db
@@ -88,6 +90,18 @@ class DQN_Trainer(object):
         # target_net = DQN(screen_height, screen_width).to(device)
         self.policy_net = DQN().to(self.device)
         self.target_net = DQN().to(self.device)
+        self.is_trained = False
+        self.avgFeature = None
+        if args.configStr is not None:
+            self.is_trained = True
+            pth = os.path.abspath(args.configStr)
+            assert pathlib.Path(pth).exists()
+            data = torch.load(pth)
+            self.policy_net.load_state_dict(data['mdl'])
+            if 'avgFeat' in data:
+                self.avgFeature = data['avgFeat']
+            db.printInfo('LOADED MODEL')
+
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         self.best_model = None
@@ -213,7 +227,7 @@ class DQN_Trainer(object):
                 if save_states:
                     state_list.append(state)
                 ep_rwd += reward
-                if done or t > 10000:
+                if done or t > 30000:
                     break
         #
         # Based on the total reward for the episode determine the best model.
@@ -225,7 +239,7 @@ class DQN_Trainer(object):
         else:
             return ep_rwd, state_list
 
-    def train(self):
+    def train(self, rwd_weight=None):
         #
         # Train.
         for i_episode in range(self.num_episodes):
@@ -240,11 +254,12 @@ class DQN_Trainer(object):
                 if self.plot and i_episode % 100 == 0:
                     self.get_screen()
                 next_state = torch.from_numpy(next_state).unsqueeze(0).to(self.device, dtype=torch.float)
-                reward = torch.tensor([reward], device=self.device)
+                if rwd_weight is None:
+                    reward = torch.tensor([reward], device=self.device)
+                else:
+                    reward = rwd_weight.t() @ state
                 #
                 # Observe new state
-                last_screen = state
-                current_screen = next_state
                 if done:
                     next_state = None
                 #
@@ -256,7 +271,7 @@ class DQN_Trainer(object):
                 #
                 # Perform one step of the optimization (on the target network)
                 self.optimize_model()
-                if done:
+                if done or t > 30000:
                     self.episode_durations.append(t + 1)
                     self.showProgress(i_episode)
                     break
@@ -273,10 +288,12 @@ class DQN_Trainer(object):
         #
         # Done training.
         print('Complete')
-        self.env.render()
-        self.env.close()
-        plt.ioff()
-        plt.show()
+        self.is_trained = True
+        if self.plot:
+            self.env.render()
+            self.env.close()
+            plt.ioff()
+            plt.show()
 
     def showProgress(self, e_num):
         means = 0
@@ -299,23 +316,50 @@ class DQN_Trainer(object):
 
             plt.pause(0.001)  # pause a bit so that plots are updated
 
+    def saveBestModel(self):
+        pathlib.Path('mdls/').mkdir(parents=True, exist_ok=True)
+        state = {
+            'mdl': self.best_model.state_dict(),
+            'avgFeat': self.avgFeature
+        }
+        import datetime
+        now = datetime.datetime.now()
+        save_name = 'mdls/' + 'mdl_DATE-' + now.isoformat() + '.pth.tar'
+        torch.save(state, save_name)
+
     def gatherAverageFeature(self):
-        n_iter = 1000
-        sample_sum = None
-        for i in range(n_iter):
-            rwd, states = self.testModel(self.best_model, True)
-            episodeMean = torch.stack(states).mean(0)
-            if sample_sum is None:
-                sample_sum = episodeMean
-            else:
-                sample_sum += episodeMean
-        sample_sum /= n_iter
-        db.printInfo(sample_sum)
+        with torch.no_grad():
+            n_iter = 1000
+            sample_sum = None
+            rwd_sum = None
+            for i in range(n_iter):
+                rwd, states = self.testModel(self.best_model, True)
+                episodeMean = torch.stack(states).mean(0)
+                if sample_sum is None:
+                    sample_sum = episodeMean
+                    rwd_sum = rwd
+                else:
+                    sample_sum += episodeMean
+                    rwd_sum += rwd
+            sample_sum /= n_iter
+            rwd_sum /= n_iter
+            db.printInfo(sample_sum)
+            db.printInfo(rwd_sum)
+        self.avgFeature = sample_sum
+        return sample_sum, rwd_sum
+
+class ALVIRL(object):
+
+    def __init__(self, args):
+        expert = DQN_Trainer(args)
+        if not expert.is_trained:
+            expert.train()
+        # if
 #
 # Parse the input arguments.
 def getInputArgs():
     parser = argparse.ArgumentParser('General tool to train a NN based on passed configuration.')
-    # parser.add_argument('--config', dest='configStr', default='DefaultConfig', type=str, help='Name of the config file to import.')
+    parser.add_argument('--config', dest='configStr', default=None, type=str, help='Name of the config file to import.')
     parser.add_argument('--plot', dest='plot', default=False, action='store_true', help='Whether to plot the training progress.')
     args = parser.parse_args()
     return args
@@ -325,3 +369,4 @@ if __name__ == '__main__':
     dqnTrainer = DQN_Trainer(args)
     dqnTrainer.train()
     dqnTrainer.gatherAverageFeature()
+    dqnTrainer.saveBestModel()
