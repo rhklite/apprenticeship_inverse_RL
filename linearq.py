@@ -77,8 +77,7 @@ class DQN_Trainer(object):
                         T.Resize(40, interpolation=Image.CUBIC),
                         T.ToTensor()])
 
-
-    def __init__(self, env, args):
+    def __init__(self, args, env):
         # Get screen size so that we can initialize layers correctly based on shape
         # returned from AI gym. Typical dimensions at this point are close to 3x40x90
         # which is the result of a clamped and down-scaled render buffer in get_screen()
@@ -123,9 +122,9 @@ class DQN_Trainer(object):
             plt.show()
 
     def get_cart_location(self, screen_width):
-        world_width = self.env.x_threshold * 2
+        world_width = self.env.unwrapped.x_threshold * 2
         scale = screen_width / world_width
-        return int(self.env.state[0] * scale + screen_width / 2.0)  # MIDDLE OF CART
+        return int(self.env.unwrapped.state[0] * scale + screen_width / 2.0)  # MIDDLE OF CART
 
     def get_screen(self):
         # Returned screen requested by gym is 400x600x3, but is sometimes larger
@@ -215,16 +214,17 @@ class DQN_Trainer(object):
     def testModel(self, mdl, save_states=False):
         ep_rwd = 0
         state_list = []
-        state = torch.from_numpy(self.env.reset()).unsqueeze(0).to(self.device, dtype=torch.float)
+        state_tp = self.env.reset()
+        state = torch.from_numpy(state_tp).unsqueeze(0).to(self.device, dtype=torch.float)
         if save_states:
-            state_list.append(self.featurefn(state))
+            state_list.append(self.featurefn(state_tp))
         with torch.no_grad():
             for t in count():
                 a = self.policy_net(state).max(1)[1].view(1, 1)
-                state, reward, done, _ = self.env.step(a.item())
-                state = torch.from_numpy(state).unsqueeze(0).to(self.device, dtype=torch.float)
+                state_tp, reward, done, _ = self.env.step(a.item())
+                state = torch.from_numpy(state_tp).unsqueeze(0).to(self.device, dtype=torch.float)
                 if save_states:
-                    state_list.append(self.featurefn(state))
+                    state_list.append(self.featurefn(state_tp))
                 ep_rwd += reward
                 if done or t > 30000:
                     break
@@ -243,30 +243,18 @@ class DQN_Trainer(object):
         # Have to normalize everything
         # normalizer = torch.tensor([self.env.x_threshold, self.env.x_threshold, self.env.theta_threshold_radians, self.env.theta_threshold_radians])
         x, x_dot, theta, theta_dot = state
-        x = (x + self.env.x_threshold) / (2 * self.env.x_threshold)
+        x = (x + self.env.unwrapped.x_threshold) / (2 * self.env.unwrapped.x_threshold)
         #
         # Assume that the velocity never goes too high.
-        x_dot = (x_dot + self.env.x_threshold) / (2 * self.env.x_threshold)
-        theta = (theta + self.env.theta_threshold_radians) / (2 * self.env.theta_threshold_radians)
-        theta_dot = (theta_dot + self.env.theta_threshold_radians) / (2 * self.env.theta_threshold_radians)
-        state = torch.tensor(
+        x_dot = (x_dot + self.env.unwrapped.x_threshold) / (2 * self.env.unwrapped.x_threshold)
+        theta = (theta + self.env.unwrapped.theta_threshold_radians) / (2 * self.env.unwrapped.theta_threshold_radians)
+        theta_dot = (theta_dot + self.env.unwrapped.theta_threshold_radians) / (2 * self.env.unwrapped.theta_threshold_radians)
+        feat = torch.tensor(
             [
                 x, x_dot, theta, theta_dot,
                 x ** 2, x_dot ** 2, theta ** 2, theta_dot ** 2,
-                x ** 3, x_dot ** 3, theta ** 3, theta_dot ** 3,
-                x ** 4, x_dot ** 4, theta ** 4, theta_dot ** 4,
             ]
         )
-        x, x_dot, theta, theta_dot = state
-        feat = torch.tensor(
-                        [
-                            x, x_dot, theta, theta_dot,
-                            abs(x), abs(x_dot), abs(theta), abs(theta_dot),
-                            x ** 2, x_dot ** 2, theta ** 2, theta_dot ** 2,
-                            x ** 3, x_dot ** 3, theta ** 3, theta_dot ** 3,
-                            x ** 4, x_dot ** 4, theta ** 4, theta_dot ** 4,
-                        ]
-                    )
         return feat
 
     def train(self, rwd_weight=None):
@@ -287,8 +275,8 @@ class DQN_Trainer(object):
                 if rwd_weight is None:
                     # reward = torch.tensor([reward], device=self.device)
                     x, x_dot, theta, theta_dot = next_state_np
-                    r1 = (self.env.x_threshold - abs(x)) / self.env.x_threshold - 0.8
-                    r2 = (self.env.theta_threshold_radians - abs(theta)) / self.env.theta_threshold_radians - 0.5
+                    r1 = (self.env.unwrapped.x_threshold - abs(x)) / self.env.unwrapped.x_threshold - 0.8
+                    r2 = (self.env.unwrapped.theta_threshold_radians - abs(theta)) / self.env.unwrapped.theta_threshold_radians - 0.5
                     reward = torch.tensor([r1 + r2])
                 else:
                     feat = self.featurefn(next_state_np)
@@ -385,8 +373,8 @@ class DQN_Trainer(object):
 
 class ALVIRL(object):
 
-    def __init__(self, args):
-        self.env = gym.make('CartPole-v0').unwrapped
+    def __init__(self, args, env):
+        self.env = env
         self.expert = DQN_Trainer(args, self.env)
         if not self.expert.is_trained:
             self.expert.train()
@@ -394,24 +382,29 @@ class ALVIRL(object):
         # Not all saved things have this, compute just in case.
         if self.expert.avgFeature is None:
             self.expert.gatherAverageFeature()
+            state = {
+                'mdl': self.expert.policy_net.state_dict(),
+                'avgFeat': self.expert.avgFeature
+            }
+            torch.save(state, args.configStr)
         self.expert_feat = self.expert.avgFeature
         args.configStr = None
         self.args = args
 
     def train(self):
-        sampleFeat = self.student.featurefn(self.env.reset())
+        student = DQN_Trainer(args, self.env)
+        sampleFeat = student.featurefn(self.env.reset())
         w_0 = torch.rand(sampleFeat.size(0), 1)
         w_0 /= w_0.norm()
         weights = [w_0]
         i = 1
         #
-        # Create zeroth student.
-        student = DQN_Trainer(args, self.env)
+        # Train zeroth student.
         student.train(w_0)
         studentFeat, studentRwd = student.gatherAverageFeature()
         #
         # Create first student.
-        weights.append(self.expert_feat - studentFeat)
+        weights.append((self.expert_feat - studentFeat).view(-1, 1))
         feature_bar_list = [studentFeat]
         feature_list = [studentFeat]
         #
@@ -422,11 +415,11 @@ class ALVIRL(object):
             student.train(weights[-1])
             studentFeat, studentRwd = student.gatherAverageFeature()
             feature_list.append(studentFeat)
-            feat_bar_next = feature_bar_list[-1] + ((feature_list[-1] - feature_bar_list[-1]).t() @ (self.expert_feat - feature_bar_list[-1]))\
-                            / ((feature_list[-1] - feature_bar_list[-1]).t() @ (feature_list[-1] - feature_bar_list[-1]))\
-                            * (feature_list[-1] - feature_bar_list[-1])
+            feat_bar_next = feature_bar_list[-1] + ((feature_list[-1] - feature_bar_list[-1]).view(-1, 1).t() @ (self.expert_feat - feature_bar_list[-1]).view(-1,1))\
+                             / ((feature_list[-1] - feature_bar_list[-1]).view(-1, 1).t() @ (feature_list[-1] - feature_bar_list[-1]).view(-1,1))\
+                             * (feature_list[-1] - feature_bar_list[-1])
             feature_bar_list.append(feat_bar_next)
-            weights.append(self.expert_feat - feat_bar_next)
+            weights.append((self.expert_feat - feat_bar_next).view(-1, 1))
             db.printInfo('t: ', (self.expert_feat - feat_bar_next).norm().item())
         db.printInfo(feat_bar_next)
 
@@ -441,7 +434,10 @@ def getInputArgs():
 
 if __name__ == '__main__':
     args = getInputArgs()
-    dqnTrainer = DQN_Trainer(args)
-    dqnTrainer.train()
-    dqnTrainer.gatherAverageFeature()
-    dqnTrainer.saveBestModel()
+    env = gym.make('CartPole-v0')
+    arl = ALVIRL(args, env)
+    arl.train()
+    # dqnTrainer = DQN_Trainer(env, args)
+    # dqnTrainer.train()
+    # dqnTrainer.saveBestModel()
+    # dqnTrainer.gatherAverageFeature()
