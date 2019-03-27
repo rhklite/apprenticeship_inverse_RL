@@ -9,6 +9,7 @@ import random
 import pathlib
 import argparse
 import matplotlib
+matplotlib.use("TkAgg")
 import debug as db
 import numpy as np
 import torch.nn as nn
@@ -82,11 +83,10 @@ class DQN_Trainer(object):
         # Get screen size so that we can initialize layers correctly based on shape
         # returned from AI gym. Typical dimensions at this point are close to 3x40x90
         # which is the result of a clamped and down-scaled render buffer in get_screen()
-        self.env = env
+        save_path = 'vids/%s/' % name
+        pathlib.Path(save_path).mkdir(parents=True, exist_ok=True)
+        self.env = gym.wrappers.Monitor(env, save_path, video_callable=lambda episode_id: episode_id % 199 == 0)
         self.env.reset()
-
-        # policy_net = DQN(screen_height, screen_width).to(device)
-        # target_net = DQN(screen_height, screen_width).to(device)
         self.policy_net = DQN().to(self.device)
         self.target_net = DQN().to(self.device)
         self.is_trained = False
@@ -332,7 +332,7 @@ class DQN_Trainer(object):
         db.printInfo('Episode %d/%d Duration: %d AVG: %d'%(e_num, self.num_episodes, durations_t[-1], means))
         plt.figure(2)
         plt.clf()
-        plt.title('Training...')
+        plt.title('Performance: %s' % self.name)
         plt.xlabel('Episode')
         plt.ylabel('Duration')
         plt.plot(durations_t.numpy())
@@ -404,13 +404,15 @@ class ALVIRL(object):
         student = DQN_Trainer(args, self.env, 'Student_0')
         sampleFeat = student.featurefn(self.env.reset())
         w_0 = torch.rand(sampleFeat.size(0), 1)
-        w_0 /= w_0.norm()
+        w_0 /= w_0.norm(1)
+        rwd_list = []
         weights = [w_0]
         i = 1
         #
         # Train zeroth student.
         student.train(w_0)
         studentFeat, studentRwd = student.gatherAverageFeature()
+        rwd_list.append(studentRwd)
         #
         # Create first student.
         weights.append((self.expert_feat - studentFeat).view(-1, 1))
@@ -423,6 +425,7 @@ class ALVIRL(object):
             student = DQN_Trainer(args, self.env, 'Student_%d' % (i + 1))
             student.train(weights[-1])
             studentFeat, studentRwd = student.gatherAverageFeature()
+            rwd_list.append(studentRwd)
             feature_list.append(studentFeat)
             feat_bar_next = feature_bar_list[-1] + ((feature_list[-1] - feature_bar_list[-1]).view(-1, 1).t() @ (self.expert_feat - feature_bar_list[-1]).view(-1,1))\
                              / ((feature_list[-1] - feature_bar_list[-1]).view(-1, 1).t() @ (feature_list[-1] - feature_bar_list[-1]).view(-1,1))\
@@ -431,7 +434,11 @@ class ALVIRL(object):
             weights.append((self.expert_feat - feat_bar_next).view(-1, 1))
             db.printInfo('t: ', (self.expert_feat - feat_bar_next).norm().item())
         db.printInfo(feat_bar_next)
-
+        plt.figure()
+        plt.plot(rwd_list)
+        plt.xlabel('Student Number')
+        plt.xlabel('Episode Length')
+        plt.savefig('plts/avgRewardProgress.png')
 #
 # Parse the input arguments.
 def getInputArgs():
