@@ -452,7 +452,7 @@ class ALVIRL(object):
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         plt.xlabel('Student Number')
         plt.ylabel('Squared error of features of features')
-        plt.savefig('plts/avgRewardProgress.png')
+        plt.savefig('plts/sqerr.png')
 #
 # Parse the input arguments.
 def getInputArgs():
