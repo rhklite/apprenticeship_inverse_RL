@@ -9,6 +9,7 @@ import random
 import pathlib
 import argparse
 import matplotlib
+from matplotlib.ticker import MaxNLocator
 matplotlib.use("TkAgg")
 import debug as db
 import numpy as np
@@ -85,6 +86,7 @@ class DQN_Trainer(object):
         # which is the result of a clamped and down-scaled render buffer in get_screen()
         save_path = 'vids/%s/' % name
         pathlib.Path(save_path).mkdir(parents=True, exist_ok=True)
+        self.env = env
         self.env = gym.wrappers.Monitor(env, save_path, video_callable=lambda episode_id: episode_id % 199 == 0)
         self.env.reset()
         self.policy_net = DQN().to(self.device)
@@ -406,6 +408,7 @@ class ALVIRL(object):
         w_0 = torch.rand(sampleFeat.size(0), 1)
         w_0 /= w_0.norm(1)
         rwd_list = []
+        t_list = []
         weights = [w_0]
         i = 1
         #
@@ -413,6 +416,7 @@ class ALVIRL(object):
         student.train(w_0)
         studentFeat, studentRwd = student.gatherAverageFeature()
         rwd_list.append(studentRwd)
+        t_list.append((self.expert_feat - studentFeat).norm().item())
         #
         # Create first student.
         weights.append((self.expert_feat - studentFeat).view(-1, 1))
@@ -432,13 +436,23 @@ class ALVIRL(object):
                              * (feature_list[-1] - feature_bar_list[-1])
             feature_bar_list.append(feat_bar_next)
             weights.append((self.expert_feat - feat_bar_next).view(-1, 1))
-            db.printInfo('t: ', (self.expert_feat - feat_bar_next).norm().item())
+            t_list.append((self.expert_feat - feat_bar_next).norm().item())
+            db.printInfo('t: ', t_list[-1])
         db.printInfo(feat_bar_next)
         plt.figure()
+        ax = plt.gca()
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         plt.plot(rwd_list)
         plt.xlabel('Student Number')
-        plt.xlabel('Episode Length')
+        plt.ylabel('Episode Length')
         plt.savefig('plts/avgRewardProgress.png')
+        plt.figure()
+        ax = plt.gca()
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        plt.plot(t_list)
+        plt.xlabel('Student Number')
+        plt.ylabel('Squared error of features of features')
+        plt.savefig('plts/sqerr.png')
 #
 # Parse the input arguments.
 def getInputArgs():
