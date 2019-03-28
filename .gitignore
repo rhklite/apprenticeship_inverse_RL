@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 mdls/
+vids/
+*.png
+.DS_Store
 
 # Distribution / packaging
 .Python

@@ -4,10 +4,12 @@ import gym
 import math
 import copy
 import torch
+import tqdm
 import random
 import pathlib
 import argparse
 import matplotlib
+matplotlib.use("TkAgg")
 import debug as db
 import numpy as np
 import torch.nn as nn
@@ -68,24 +70,23 @@ class DQN_Trainer(object):
     BATCH_SIZE = 128
     GAMMA = 0.999
     EPS_START = 0.95
-    num_episodes = 500
+    num_episodes = 200
 
     EPS_END = 0.05
-    EPS_DECAY = 500
+    EPS_DECAY = num_episodes * 0.9
     TARGET_UPDATE = 10
     resize = T.Compose([T.ToPILImage(),
                         T.Resize(40, interpolation=Image.CUBIC),
                         T.ToTensor()])
 
-    def __init__(self, args, env):
+    def __init__(self, args, env, name):
         # Get screen size so that we can initialize layers correctly based on shape
         # returned from AI gym. Typical dimensions at this point are close to 3x40x90
         # which is the result of a clamped and down-scaled render buffer in get_screen()
-        self.env = env
+        save_path = 'vids/%s/' % name
+        pathlib.Path(save_path).mkdir(parents=True, exist_ok=True)
+        self.env = gym.wrappers.Monitor(env, save_path, video_callable=lambda episode_id: episode_id % 199 == 0)
         self.env.reset()
-
-        # policy_net = DQN(screen_height, screen_width).to(device)
-        # target_net = DQN(screen_height, screen_width).to(device)
         self.policy_net = DQN().to(self.device)
         self.target_net = DQN().to(self.device)
         self.is_trained = False
@@ -112,14 +113,15 @@ class DQN_Trainer(object):
         self.steps_done = 0
         self.episode_durations = []
         self.plot = args.plot
+        self.name = name
+        plt.ion()
         if self.plot:
-            plt.ion()
             plt.figure()
             self.init_screen = self.get_screen()
             plt.imshow(self.get_screen().cpu().squeeze(0).permute(1, 2, 0).numpy(),
                     interpolation='none')
             plt.title('Example extracted screen')
-            plt.show()
+            # plt.show()
 
     def get_cart_location(self, screen_width):
         world_width = self.env.unwrapped.x_threshold * 2
@@ -260,7 +262,7 @@ class DQN_Trainer(object):
     def train(self, rwd_weight=None):
         #
         # Train.
-        for i_episode in range(self.num_episodes):
+        for i_episode in tqdm.tqdm(range(self.num_episodes)):
             #
             # Initialize the environment and state
             state = torch.from_numpy(self.env.reset()).unsqueeze(0).to(self.device, dtype=torch.float)
@@ -273,10 +275,12 @@ class DQN_Trainer(object):
                     self.get_screen()
                 next_state = torch.from_numpy(next_state_np).unsqueeze(0).to(self.device, dtype=torch.float)
                 if rwd_weight is None:
-                    # reward = torch.tensor([reward], device=self.device)
+                    reward = torch.tensor([reward], device=self.device)
                     x, x_dot, theta, theta_dot = next_state_np
                     r1 = (self.env.unwrapped.x_threshold - abs(x)) / self.env.unwrapped.x_threshold - 0.8
                     r2 = (self.env.unwrapped.theta_threshold_radians - abs(theta)) / self.env.unwrapped.theta_threshold_radians - 0.5
+                    #
+                    # Must be R ∈ [-1, 1]
                     reward = torch.tensor([r1 + r2])
                 else:
                     feat = self.featurefn(next_state_np)
@@ -312,6 +316,8 @@ class DQN_Trainer(object):
         # Done training.
         print('Complete')
         self.is_trained = True
+        pathlib.Path('plts/').mkdir(parents=True, exist_ok=True)
+        plt.savefig('plts/train-%s.png' % self.name)
         if self.plot:
             self.env.render()
             self.env.close()
@@ -324,13 +330,13 @@ class DQN_Trainer(object):
         if len(self.episode_durations) >= 100:
             means = durations_t[-100:-1].mean().item()
         db.printInfo('Episode %d/%d Duration: %d AVG: %d'%(e_num, self.num_episodes, durations_t[-1], means))
+        plt.figure(2)
+        plt.clf()
+        plt.title('Performance: %s' % self.name)
+        plt.xlabel('Episode')
+        plt.ylabel('Duration')
+        plt.plot(durations_t.numpy())
         if self.plot:
-            plt.figure(2)
-            plt.clf()
-            plt.title('Training...')
-            plt.xlabel('Episode')
-            plt.ylabel('Duration')
-            plt.plot(durations_t.numpy())
             # Take 100 episode averages and plot them too
             if len(durations_t) >= 100:
                 means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
@@ -348,14 +354,15 @@ class DQN_Trainer(object):
         import datetime
         now = datetime.datetime.now()
         save_name = 'mdls/' + 'mdl_DATE-' + now.isoformat() + '.pth.tar'
+        db.printInfo(save_name)
         torch.save(state, save_name)
 
     def gatherAverageFeature(self):
         with torch.no_grad():
-            n_iter = 1000
+            n_iter = 2000
             sample_sum = None
             rwd_sum = None
-            for i in range(n_iter):
+            for i in tqdm.tqdm(range(n_iter)):
                 rwd, states = self.testModel(self.best_model, True)
                 episodeMean = torch.stack(states).mean(0)
                 if sample_sum is None:
@@ -375,9 +382,11 @@ class ALVIRL(object):
 
     def __init__(self, args, env):
         self.env = env
-        self.expert = DQN_Trainer(args, self.env)
+        self.expert = DQN_Trainer(args, self.env, 'Expert')
         if not self.expert.is_trained:
             self.expert.train()
+            self.expert.gatherAverageFeature()
+            self.expert.saveBestModel()
         #
         # Not all saved things have this, compute just in case.
         if self.expert.avgFeature is None:
@@ -392,16 +401,18 @@ class ALVIRL(object):
         self.args = args
 
     def train(self):
-        student = DQN_Trainer(args, self.env)
+        student = DQN_Trainer(args, self.env, 'Student_0')
         sampleFeat = student.featurefn(self.env.reset())
         w_0 = torch.rand(sampleFeat.size(0), 1)
-        w_0 /= w_0.norm()
+        w_0 /= w_0.norm(1)
+        rwd_list = []
         weights = [w_0]
         i = 1
         #
         # Train zeroth student.
         student.train(w_0)
         studentFeat, studentRwd = student.gatherAverageFeature()
+        rwd_list.append(studentRwd)
         #
         # Create first student.
         weights.append((self.expert_feat - studentFeat).view(-1, 1))
@@ -410,10 +421,11 @@ class ALVIRL(object):
         #
         # Iterate training.
         n_iter = 20
-        for i in range(n_iter):
-            student = DQN_Trainer(args, self.env)
+        for i in tqdm.tqdm(range(n_iter)):
+            student = DQN_Trainer(args, self.env, 'Student_%d' % (i + 1))
             student.train(weights[-1])
             studentFeat, studentRwd = student.gatherAverageFeature()
+            rwd_list.append(studentRwd)
             feature_list.append(studentFeat)
             feat_bar_next = feature_bar_list[-1] + ((feature_list[-1] - feature_bar_list[-1]).view(-1, 1).t() @ (self.expert_feat - feature_bar_list[-1]).view(-1,1))\
                              / ((feature_list[-1] - feature_bar_list[-1]).view(-1, 1).t() @ (feature_list[-1] - feature_bar_list[-1]).view(-1,1))\
@@ -422,7 +434,11 @@ class ALVIRL(object):
             weights.append((self.expert_feat - feat_bar_next).view(-1, 1))
             db.printInfo('t: ', (self.expert_feat - feat_bar_next).norm().item())
         db.printInfo(feat_bar_next)
-
+        plt.figure()
+        plt.plot(rwd_list)
+        plt.xlabel('Student Number')
+        plt.xlabel('Episode Length')
+        plt.savefig('plts/avgRewardProgress.png')
 #
 # Parse the input arguments.
 def getInputArgs():
