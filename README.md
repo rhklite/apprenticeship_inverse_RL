@@ -12,6 +12,10 @@
 [![tabularQvideo](http://img.youtube.com/vi/Wd1xfNNo9kc/0.jpg)](https://www.youtube.com/watch?v=Wd1xfNNo9kc)
 
 - [Tabular Q Google Colab Version](https://colab.research.google.com/drive/1Tmc5fPHP9J0s-vQukLDzRywe47BNni37#scrollTo=bzxZCx5VD3xn)
+  - Running the Code: 
+        1. File → playground mode, or  Copy to Drive to open a copy
+        2. shift + enter to run 1 cell. Run all the cells
+  -  Entire training takes around 10~15min
 
 ## Team Member
 
