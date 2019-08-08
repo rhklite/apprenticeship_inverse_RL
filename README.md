@@ -1,6 +1,7 @@
 # Apprenticeship Learning with Inverse Reinforcement Learning
 
 - This includes a double deep Q implementation (by Daniel. D) and a tabular Q method (by Richard H) of the paper [1] P. Abbeel and A. Y. Ng, “Apprenticeship Learning via Inverse Reinforcement Learning.” using CartPole model from openAI gym.
+- [Apprenticeship Learning via Inverse Reinforcement Learning.pdf](Apprenticeship Learning via Inverse Reinforcement Learning.pdf) is the presentation slides
 
 ## Deep Q Implementation
 
