@@ -19,6 +19,6 @@
 
 ## Team Member
 
-- Daniel Dworakowski: https://github.com/DanielDworakowski/ALVIRL
-- Omar Ismail: https://github.com/omarismail94
+- [Daniel Dworakowski](https://github.com/DanielDworakowski/ALVIRL)
+- [Omar Ismail](https://github.com/omarismail94)
 - Richard Hu
