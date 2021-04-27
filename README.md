@@ -21,12 +21,14 @@
 ![alt](assets/dqn.gif)
 
 DQN Performance
+![alt](assets/dqn.png)
 
 ## [Tabular Q Implementation](https://www.youtube.com/watch?v=Wd1xfNNo9kc)
 
 ![alt](assets/tabular_q.gif)
 
 Tabular Q Performance
+![alt](assets/tabular_q.png)
 
 ## Team Member
 
