@@ -20,7 +20,7 @@
 
 ![alt](assets/dqn.gif)
 
-DQN Performance ![alt attribute goes here!](assets/dqn.png "This is a Title" )
+DQN Performance
 
 ## [Tabular Q Implementation](https://www.youtube.com/watch?v=Wd1xfNNo9kc)
 
