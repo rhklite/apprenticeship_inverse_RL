@@ -1,6 +1,6 @@
 # Apprenticeship Learning with Inverse Reinforcement Learning
 
-- This includes a double deep Q implementation (by [Daniel. D](https://github.com/DanielDworakowski)) and a tabular Q method (by [Richard H](https://github.com/rhklite)) of the paper [1] P. Abbeel and A. Y. Ng, “Apprenticeship Learning via Inverse Reinforcement Learning.” using CartPole model from openAI gym.
+- This includes a double deep Q implementation (by [Daniel. D](https://github.com/DanielDworakowski)) and a tabular Q method (by [Richard H](https://github.com/rhklite)) of the paper [P. Abbeel and A. Y. Ng, “Apprenticeship Learning via Inverse Reinforcement Learning.](https://ai.stanford.edu/~ang/papers/icml04-apprentice.pdf) using CartPole model from openAI gym.
 - [Apprenticeship Learning via Inverse Reinforcement Learning.pdf](Apprenticeship\Learning\via\Inverse\Reinforcement\Learning.pdf) is the presentation slides
 - [Apprenticeship_Inverse_Reinforcement_Learning.ipynb](Apprenticeship_Inverse_Reinforcement_Learning.ipynb) is the tabular Q implementation
 - [linearq.py](linearq.py) is the deep Q implementation
@@ -21,4 +21,4 @@
 
 - [Daniel Dworakowski](https://github.com/DanielDworakowski/ALVIRL)
 - [Omar Ismail](https://github.com/omarismail94)
-- Richard Hu
+- [Richard Hu](https://github.com/rhklite)
