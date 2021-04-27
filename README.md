@@ -1,8 +1,14 @@
 # Apprenticeship Learning with Inverse Reinforcement Learning
 
+- [Apprenticeship Learning with Inverse Reinforcement Learning](#apprenticeship-learning-with-inverse-reinforcement-learning)
+  - [Deep Q Implementation](#deep-q-implementation)
+  - [Tabular Q Implementation](#tabular-q-implementation)
+  - [Team Member](#team-member)
+
 - This includes a double deep Q implementation (by [Daniel. D](https://github.com/DanielDworakowski)) and a tabular Q method (by [Richard H](https://github.com/rhklite)) of the paper [P. Abbeel and A. Y. Ng, “Apprenticeship Learning via Inverse Reinforcement Learning.](https://ai.stanford.edu/~ang/papers/icml04-apprentice.pdf) using CartPole model from openAI gym.
 
 </br>
+
 - [Apprenticeship Learning via Inverse Reinforcement Learning.pdf](Apprenticeship\Learning\via\Inverse\Reinforcement\Learning.pdf) is the presentation slides
 - [Apprenticeship_Inverse_Reinforcement_Learning.ipynb](Apprenticeship_Inverse_Reinforcement_Learning.ipynb) is the tabular Q implementation
 - [linearq.py](linearq.py) is the deep Q implementation
@@ -10,15 +16,17 @@
   - Running the Code: 1. File → playground mode, or Copy to Drive to open a copy 2. shift + enter to run 1 cell. Run all the cells
   - Entire training takes around 10~15min
 
-## Deep Q Implementation
+## [Deep Q Implementation](https://www.youtube.com/watch?v=COAyi4-VlEw)
 
-[![deepQVideo](http://img.youtube.com/vi/COAyi4-VlEw/0.jpg)](https://www.youtube.com/watch?v=COAyi4-VlEw)
+![alt](assets/dqn.gif)
 
-## Tabular Q Implementation
+DQN Performance ![alt attribute goes here!](assets/dqn.png "This is a Title" )
 
-[![tabularQvideo](http://img.youtube.com/vi/Wd1xfNNo9kc/0.jpg)](https://www.youtube.com/watch?v=Wd1xfNNo9kc)
+## [Tabular Q Implementation](https://www.youtube.com/watch?v=Wd1xfNNo9kc)
 
+![alt](assets/tabular_q.gif)
 
+Tabular Q Performance
 
 ## Team Member
 
