@@ -1,6 +1,6 @@
 # source: https://stackoverflow.com/a/60569422/10251025
 
-ffmpeg -i Expert.mp4 -stream_loop 100 -i Student_0.mp4 -stream_loop  2 -i Student_2.mp4  -i  Student_9.mp4 -filter_complex \
+ffmpeg -i Expert.mp4 -stream_loop -1 -i Student_0.mp4 -stream_loop -1 -i Student_2.mp4  -i  Student_9.mp4 -filter_complex \
 "[0]drawtext=text='Expert':fontsize=20:x=(w-text_w)/2-200:y=(h-text_h)/2-150[v0];
  [1]drawtext=text='Student 0':fontsize=20:x=(w-text_w)/2-200:y=(h-text_h)/2-150[v1];
  [2]drawtext=text='Student 2':fontsize=20:x=(w-text_w)/2-200:y=(h-text_h)/2-150[v2];
@@ -9,4 +9,4 @@ ffmpeg -i Expert.mp4 -stream_loop 100 -i Student_0.mp4 -stream_loop  2 -i Studen
 
 ffmpeg -i output.mp4 -vf "fps=50" -loop 0 -y output.gif
 
-rm output.mp4
+# rm output.mp4
