@@ -9,7 +9,7 @@
 
 </br>
 
-- [Apprenticeship Learning via Inverse Reinforcement Learning.pdf](Apprenticeship\Learning\via\Inverse\Reinforcement\Learning.pdf) is the presentation slides
+- [Apprenticeship Learning via Inverse Reinforcement Learning.pdf](Apprenticeship%20Learning%20via%20Inverse%20Reinforcement%20Learning.pdf) is the presentation slides
 - [Apprenticeship_Inverse_Reinforcement_Learning.ipynb](Apprenticeship_Inverse_Reinforcement_Learning.ipynb) is the tabular Q implementation
 - [linearq.py](linearq.py) is the deep Q implementation
 - [Tabular Q Google Colab Version](https://colab.research.google.com/drive/1Tmc5fPHP9J0s-vQukLDzRywe47BNni37#scrollTo=bzxZCx5VD3xn)
